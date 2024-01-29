@@ -16,6 +16,9 @@ import com.nttdatabc.mscreditos.model.TypeCustomer;
 import com.nttdatabc.mscreditos.repository.CreditRepository;
 import com.nttdatabc.mscreditos.utils.Utilitarios;
 import com.nttdatabc.mscreditos.utils.exceptions.errors.ErrorResponseException;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Single;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,69 +39,79 @@ public class CreditServiceImpl implements CreditService {
   private CustomerApiExtImpl customerApiExtImpl;
 
   @Override
-  public List<Credit> getAllCreditsService() {
-    return creditRepository.findAll();
+  public Observable<List<Credit>> getAllCreditsService() {
+    return Observable.defer(() -> Observable.just(creditRepository.findAll()));
   }
 
   @Override
-  public Credit getCreditByIdService(String creditId) throws ErrorResponseException {
-    Optional<Credit> credit = creditRepository.findById(creditId);
-    return credit.orElseThrow(() -> new ErrorResponseException(EX_NOT_FOUND_RECURSO,
-        HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND));
+  public Single<Credit> getCreditByIdService(String creditId) throws ErrorResponseException {
+    return Single.defer(() -> {
+      Optional<Credit> credit = creditRepository.findById(creditId);
+      return Single.just(credit.orElseThrow(() -> new ErrorResponseException(EX_NOT_FOUND_RECURSO,
+          HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND)));
+    });
   }
 
   @Override
-  public void createCreditService(Credit credit) throws ErrorResponseException {
-    validateCreditsNoNulls(credit);
-    validateCreditsEmpty(credit);
-    verifyTypeCredits(credit);
-    verifyValues(credit);
-    CustomerExt customerFound = verifyCustomerExists(credit.getCustomerId(), customerApiExtImpl);
-    List<Credit> listCreditsByCustomer = getCreditsByCustomerId(credit.getCustomerId());
+  public Completable createCreditService(Credit credit) throws ErrorResponseException {
+    return Completable.fromAction(() -> {
+      validateCreditsNoNulls(credit);
+      validateCreditsEmpty(credit);
+      verifyTypeCredits(credit);
+      verifyValues(credit);
+      CustomerExt customerFound = verifyCustomerExists(credit.getCustomerId(), customerApiExtImpl);
+      List<Credit> listCreditsByCustomer = getCreditsByCustomerId(credit.getCustomerId()).blockingSingle();
 
-    if (customerFound.getType().equalsIgnoreCase(TypeCustomer.PERSONA.toString())) {
-      if (listCreditsByCustomer.size() >= MAX_SIZE_ACCOUNT_CUSTOMER_PERSONA) {
-        throw new ErrorResponseException(EX_ERROR_CONFLICTO_CUSTOMER_PERSONA,
-            HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
+      if (customerFound.getType().equalsIgnoreCase(TypeCustomer.PERSONA.toString())) {
+        if (listCreditsByCustomer.size() >= MAX_SIZE_ACCOUNT_CUSTOMER_PERSONA) {
+          throw new ErrorResponseException(EX_ERROR_CONFLICTO_CUSTOMER_PERSONA,
+              HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
+        }
       }
-    }
 
-    credit.setId(Utilitarios.generateUuid());
-    credit.setDateOpen(LocalDateTime.now().toString());
-    credit.setInterestRate(BigDecimal.valueOf(INTEREST_RATE));
-    creditRepository.save(credit);
+      credit.setId(Utilitarios.generateUuid());
+      credit.setDateOpen(LocalDateTime.now().toString());
+      credit.setInterestRate(BigDecimal.valueOf(INTEREST_RATE));
+      creditRepository.save(credit);
+    });
   }
 
   @Override
-  public void updateCreditService(Credit credit) throws ErrorResponseException {
-    validateCreditsNoNulls(credit);
-    validateCreditsEmpty(credit);
-    verifyTypeCredits(credit);
-    Optional<Credit> getCreditById = creditRepository.findById(credit.getId());
-    if (getCreditById.isEmpty()) {
-      throw new ErrorResponseException(EX_NOT_FOUND_RECURSO,
-          HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND);
-    }
-    Credit creditFound = getCreditById.get();
-    creditFound.setMountLimit(credit.getMountLimit());
-    creditFound.setTypeCredit(credit.getTypeCredit());
-    creditRepository.save(creditFound);
+  public Completable updateCreditService(Credit credit) throws ErrorResponseException {
+    return Completable.fromAction(() -> {
+      validateCreditsNoNulls(credit);
+      validateCreditsEmpty(credit);
+      verifyTypeCredits(credit);
+      Optional<Credit> getCreditById = creditRepository.findById(credit.getId());
+      if (getCreditById.isEmpty()) {
+        throw new ErrorResponseException(EX_NOT_FOUND_RECURSO,
+            HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND);
+      }
+      Credit creditFound = getCreditById.get();
+      creditFound.setMountLimit(credit.getMountLimit());
+      creditFound.setTypeCredit(credit.getTypeCredit());
+      creditRepository.save(creditFound);
+    });
   }
 
   @Override
-  public void deleteCreditById(String creditId) throws ErrorResponseException {
-    Optional<Credit> creditFindByIdOptional = creditRepository.findById(creditId);
-    if (creditFindByIdOptional.isEmpty()) {
-      throw new ErrorResponseException(EX_NOT_FOUND_RECURSO,
-          HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND);
-    }
-    creditRepository.delete(creditFindByIdOptional.get());
+  public Completable deleteCreditById(String creditId) throws ErrorResponseException {
+    return Completable.fromAction(() -> {
+      Optional<Credit> creditFindByIdOptional = creditRepository.findById(creditId);
+      if (creditFindByIdOptional.isEmpty()) {
+        throw new ErrorResponseException(EX_NOT_FOUND_RECURSO,
+            HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND);
+      }
+      creditRepository.delete(creditFindByIdOptional.get());
+    });
   }
 
   @Override
-  public List<Credit> getCreditsByCustomerId(String customerId) throws ErrorResponseException {
-    verifyCustomerExists(customerId, customerApiExtImpl);
-    return creditRepository.findByCustomerId(customerId);
+  public Observable<List<Credit>> getCreditsByCustomerId(String customerId) throws ErrorResponseException {
+    return Observable.defer(() -> {
+      verifyCustomerExists(customerId, customerApiExtImpl);
+      return Observable.just(creditRepository.findByCustomerId(customerId));
+    });
   }
 
 

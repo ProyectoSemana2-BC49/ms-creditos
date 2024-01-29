@@ -57,7 +57,7 @@ public class MovementValidator {
    * @throws ErrorResponseException Si el crédito no está registrado.
    */
   public static void validateCreditRegister(String creditId, CreditServiceImpl creditServiceImpl) throws ErrorResponseException {
-    creditServiceImpl.getCreditByIdService(creditId);
+    creditServiceImpl.getCreditByIdService(creditId).blockingGet();
   }
 
   /**

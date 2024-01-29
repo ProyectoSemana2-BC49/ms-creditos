@@ -10,7 +10,7 @@ info:
   license:
     name: Licencia MIT
     url: https://www.example.com/license
-servers: 
+servers:
   - url: http://localhost:8080/api/v1
 paths:
   /credits:
@@ -67,7 +67,7 @@ paths:
     get:
       operationId: getCreditById
       summary: Trae información de un crédito según su credit_id
-      tags: 
+      tags:
         - Créditos
       parameters:
         - in: path
@@ -126,7 +126,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Credit'
-                  
+
   /movement_credits:
     post:
       operationId: createMovementCredit
@@ -164,7 +164,7 @@ paths:
           description: Error en request
         '404':
           description: Recurso no encontrado
-  
+
   /movement_credits/{movement_id}:
     get:
       operationId: getMovementCreditById
@@ -259,7 +259,32 @@ paths:
         '404':
           description: Recurso no encontrado
 
-  
+  /report_credit/balance/{customer_id}:
+    get:
+      operationId: getBalanceCredit
+      summary: Obtener resumen de saldos promedios del mes en curso de los productos crediticios.
+      tags:
+        - Reportes
+      parameters:
+        - name: customer_id
+          in: path
+          description: ID del cliente
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reporte de saldos promedios.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceAccounts'
+        '400':
+          description: Error en request
+        '404':
+          description: Recurso no encontrado
+
+
 
 components:
   schemas:
@@ -312,3 +337,19 @@ components:
           type: number
         installment_number:
           type: integer
+    BalanceAccounts:
+      type: object
+      properties:
+        customerId:
+          type: string
+        summary_accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SummaryAccountBalance"
+    SummaryAccountBalance:
+      type: object
+      properties:
+        account_id:
+          type: string
+        balanceAvg:
+          type: number

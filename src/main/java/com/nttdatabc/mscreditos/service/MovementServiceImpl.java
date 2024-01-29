@@ -19,6 +19,9 @@ import com.nttdatabc.mscreditos.model.StatusCredit;
 import com.nttdatabc.mscreditos.repository.MovementRepository;
 import com.nttdatabc.mscreditos.utils.Utilitarios;
 import com.nttdatabc.mscreditos.utils.exceptions.errors.ErrorResponseException;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Single;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,93 +42,102 @@ public class MovementServiceImpl implements MovementService {
   private CreditServiceImpl creditServiceImpl;
 
   @Override
-  public void createMovementCreditService(MovementCredit movementCredit) throws ErrorResponseException {
-    validateMovementNoNulls(movementCredit);
-    validateMovementEmpty(movementCredit);
-    validateMovementEmpty(movementCredit);
-    validateCreditRegister(movementCredit.getCreditId(), creditServiceImpl);
-    verifyValues(movementCredit);
+  public Completable createMovementCreditService(MovementCredit movementCredit) throws ErrorResponseException {
+    return Completable.fromAction(() -> {
+      validateMovementNoNulls(movementCredit);
+      validateMovementEmpty(movementCredit);
+      validateMovementEmpty(movementCredit);
+      validateCreditRegister(movementCredit.getCreditId(), creditServiceImpl);
+      verifyValues(movementCredit);
 
-    Credit infoCreditById = creditServiceImpl.getCreditByIdService(movementCredit.getCreditId());
-    if (infoCreditById.getMountLimit().doubleValue() < movementCredit.getAmount().doubleValue()) {
-      throw new ErrorResponseException(EX_ERROR_AMOUNT_CREDIT,
-          HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
-    }
-    if (movementCredit.getTotalInstallments() > MAX_SIZE_INSTALLMENTS) {
-      throw new ErrorResponseException(EX_ERROR_INSTALLMENTS,
-          HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
-    }
+      Credit infoCreditById = creditServiceImpl.getCreditByIdService(movementCredit.getCreditId()).blockingGet();
+      if (infoCreditById.getMountLimit().doubleValue() < movementCredit.getAmount().doubleValue()) {
+        throw new ErrorResponseException(EX_ERROR_AMOUNT_CREDIT,
+            HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
+      }
+      if (movementCredit.getTotalInstallments() > MAX_SIZE_INSTALLMENTS) {
+        throw new ErrorResponseException(EX_ERROR_INSTALLMENTS,
+            HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
+      }
 
-    movementCredit.setId(Utilitarios.generateUuid());
-    movementCredit.setDayCreated(LocalDateTime.now().toString());
-    movementCredit.setStatus(StatusCredit.ACTIVO.toString());
-    movementCredit.setPaidInstallments(new ArrayList<PaidInstallment>());
-    movementRepository.save(movementCredit);
+      movementCredit.setId(Utilitarios.generateUuid());
+      movementCredit.setDayCreated(LocalDateTime.now().toString());
+      movementCredit.setStatus(StatusCredit.ACTIVO.toString());
+      movementCredit.setPaidInstallments(new ArrayList<PaidInstallment>());
+      movementRepository.save(movementCredit);
 
-    // actualizar crédito
-    infoCreditById.setMountLimit(infoCreditById.getMountLimit().subtract(movementCredit.getAmount()));
-    creditServiceImpl.updateCreditService(infoCreditById);
+      // actualizar crédito
+      infoCreditById.setMountLimit(infoCreditById.getMountLimit().subtract(movementCredit.getAmount()));
+      creditServiceImpl.updateCreditService(infoCreditById).blockingAwait();
+    });
   }
 
   @Override
-  public List<MovementCredit> getMovementsCreditsByCreditIdService(String creditId) throws ErrorResponseException {
-    validateCreditRegister(creditId, creditServiceImpl);
-    return movementRepository.findByCreditId(creditId);
+  public Observable<List<MovementCredit>> getMovementsCreditsByCreditIdService(String creditId) throws ErrorResponseException {
+    return Observable.defer(() -> {
+      validateCreditRegister(creditId, creditServiceImpl);
+      return Observable.just(movementRepository.findByCreditId(creditId));
+    });
   }
 
   @Override
-  public MovementCredit getMovementCreditByIdService(String movementId) throws ErrorResponseException {
-    Optional<MovementCredit> movement = movementRepository.findById(movementId);
-    return movement.orElseThrow(() -> new ErrorResponseException(EX_NOT_FOUND_RECURSO,
-        HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND));
+  public Single<MovementCredit> getMovementCreditByIdService(String movementId) throws ErrorResponseException {
+    return Single.defer(() -> {
+      Optional<MovementCredit> movement = movementRepository.findById(movementId);
+      return Single.just(movement.orElseThrow(() -> new ErrorResponseException(EX_NOT_FOUND_RECURSO,
+          HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND)));
+    });
   }
 
   @Override
-  public void createPaymentInstallmentByMovementId(String movementId, PaidInstallment paidInstallment) throws ErrorResponseException {
+  public Completable createPaymentInstallmentByMovementId(String movementId, PaidInstallment paidInstallment) throws ErrorResponseException {
+    return Completable.fromAction(() -> {
+      if (!paymentIsValid(paidInstallment)) {
+        throw new ErrorResponseException(EX_ERROR_REQUEST, HttpStatus.BAD_REQUEST.value(), HttpStatus.BAD_REQUEST);
+      }
 
-    if (!paymentIsValid(paidInstallment)) {
-      throw new ErrorResponseException(EX_ERROR_REQUEST, HttpStatus.BAD_REQUEST.value(), HttpStatus.BAD_REQUEST);
-    }
+      MovementCredit movementCredit = getMovementCreditByIdService(movementId).blockingGet();
+      if (movementCredit.getTotalInstallments().intValue() <= movementCredit.getPaidInstallments().size()) {
+        throw new ErrorResponseException(EX_ERROR_PAYMENT_LIMIT,
+            HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
+      }
+      validateCreditRegister(movementCredit.getCreditId(), creditServiceImpl);
+      paidInstallment.setId(Utilitarios.generateUuid());
+      paidInstallment.setDatePayment(LocalDateTime.now().toString());
+      paidInstallment.setInstallmentNumber(movementCredit.getPaidInstallments().size() + 1);
+      movementCredit.getPaidInstallments().add(paidInstallment);
 
-
-    MovementCredit movementCredit = getMovementCreditByIdService(movementId);
-    if (movementCredit.getTotalInstallments().intValue() <= movementCredit.getPaidInstallments().size()) {
-      throw new ErrorResponseException(EX_ERROR_PAYMENT_LIMIT,
-          HttpStatus.CONFLICT.value(), HttpStatus.CONFLICT);
-    }
-
-    validateCreditRegister(movementCredit.getCreditId(), creditServiceImpl);
-    paidInstallment.setId(Utilitarios.generateUuid());
-    paidInstallment.setDatePayment(LocalDateTime.now().toString());
-    paidInstallment.setInstallmentNumber(movementCredit.getPaidInstallments().size() + 1);
-    movementCredit.getPaidInstallments().add(paidInstallment);
-
-    updateMovementCreditService(movementCredit);
-    MovementCredit movementCreditVerify = getMovementCreditByIdService(movementId);
-    if (movementCreditVerify.getTotalInstallments().intValue() == movementCredit.getPaidInstallments().size()) {
-      movementCreditVerify.setStatus(StatusCredit.PAGADO.toString());
-      updateMovementCreditService(movementCreditVerify);
-    }
+      updateMovementCreditService(movementCredit).blockingAwait();
+      MovementCredit movementCreditVerify = getMovementCreditByIdService(movementId).blockingGet();
+      if (movementCreditVerify.getTotalInstallments().intValue() == movementCredit.getPaidInstallments().size()) {
+        movementCreditVerify.setStatus(StatusCredit.PAGADO.toString());
+        updateMovementCreditService(movementCreditVerify).blockingAwait();
+      }
+    });
   }
 
   @Override
-  public void updateMovementCreditService(MovementCredit movementCredit) throws ErrorResponseException {
-    MovementCredit movementFound = getMovementCreditByIdService(movementCredit.getId());
-    movementFound.setAmount(movementCredit.getAmount());
-    movementFound.setStatus(movementCredit.getStatus());
-    movementFound.setDueDate(movementCredit.getDueDate());
-    movementFound.setPaidInstallments(movementCredit.getPaidInstallments());
-    movementFound.setTotalInstallments(movementCredit.getTotalInstallments());
-    movementRepository.save(movementFound);
+  public Completable updateMovementCreditService(MovementCredit movementCredit) throws ErrorResponseException {
+    return Completable.fromAction(() -> {
+      MovementCredit movementFound = getMovementCreditByIdService(movementCredit.getId()).blockingGet();
+      movementFound.setAmount(movementCredit.getAmount());
+      movementFound.setStatus(movementCredit.getStatus());
+      movementFound.setDueDate(movementCredit.getDueDate());
+      movementFound.setPaidInstallments(movementCredit.getPaidInstallments());
+      movementFound.setTotalInstallments(movementCredit.getTotalInstallments());
+      movementRepository.save(movementFound);
+    });
   }
 
   @Override
-  public void deleteMovementCredit(String movementId) throws ErrorResponseException {
-    Optional<MovementCredit> movementFindByIdOptional = movementRepository.findById(movementId);
-    if (movementFindByIdOptional.isEmpty()) {
-      throw new ErrorResponseException(EX_NOT_FOUND_RECURSO, HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND);
-    }
-    movementRepository.delete(movementFindByIdOptional.get());
+  public Completable deleteMovementCredit(String movementId) throws ErrorResponseException {
+    return Completable.fromAction(() -> {
+      Optional<MovementCredit> movementFindByIdOptional = movementRepository.findById(movementId);
+      if (movementFindByIdOptional.isEmpty()) {
+        throw new ErrorResponseException(EX_NOT_FOUND_RECURSO, HttpStatus.NOT_FOUND.value(), HttpStatus.NOT_FOUND);
+      }
+      movementRepository.delete(movementFindByIdOptional.get());
+    });
   }
 
 }

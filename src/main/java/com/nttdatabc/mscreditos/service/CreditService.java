@@ -2,21 +2,24 @@ package com.nttdatabc.mscreditos.service;
 
 import com.nttdatabc.mscreditos.model.Credit;
 import com.nttdatabc.mscreditos.utils.exceptions.errors.ErrorResponseException;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Single;
 import java.util.List;
 
 /**
  * Reposirotory credit.
  */
 public interface CreditService {
-  List<Credit> getAllCreditsService();
+  Observable<List<Credit>> getAllCreditsService();
 
-  Credit getCreditByIdService(String creditId) throws ErrorResponseException;
+  Single<Credit> getCreditByIdService(String creditId) throws ErrorResponseException;
 
-  void createCreditService(Credit credit) throws ErrorResponseException;
+  Completable createCreditService(Credit credit) throws ErrorResponseException;
 
-  void updateCreditService(Credit credit) throws ErrorResponseException;
+  Completable updateCreditService(Credit credit) throws ErrorResponseException;
 
-  void deleteCreditById(String creditId) throws ErrorResponseException;
+  Completable deleteCreditById(String creditId) throws ErrorResponseException;
 
-  List<Credit> getCreditsByCustomerId(String customerId) throws ErrorResponseException;
+  Observable<List<Credit>> getCreditsByCustomerId(String customerId) throws ErrorResponseException;
 }

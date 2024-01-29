@@ -44,7 +44,7 @@ public class CreditTest {
     when(creditRepository.findAll()).thenReturn(Collections.singletonList(new Credit()));
 
     // Act
-    List<Credit> result = creditService.getAllCreditsService();
+    List<Credit> result = creditService.getAllCreditsService().blockingSingle();
 
     // Assert
     assertNotNull(result);
@@ -59,7 +59,7 @@ public class CreditTest {
     when(creditRepository.findById("testCreditId")).thenReturn(Optional.of(creditMock));
 
     // Act
-    Credit result = creditService.getCreditByIdService("testCreditId");
+    Credit result = creditService.getCreditByIdService("testCreditId").blockingGet();
 
     // Assert
     assertNotNull(result);
@@ -82,7 +82,7 @@ public class CreditTest {
     when(creditRepository.findByCustomerId("testCustomerId")).thenReturn(listCreditsByCustomer);
 
     // Act
-    assertDoesNotThrow(() -> creditService.createCreditService(creditMock));
+    assertDoesNotThrow(() -> creditService.createCreditService(creditMock).blockingAwait());
 
     // Assert
     verify(creditRepository, times(1)).save(creditMock);
@@ -102,7 +102,7 @@ public class CreditTest {
     when(creditRepository.findByCustomerId("testCustomerId")).thenReturn(listCreditsByCustomer);
 
     // Act and Assert
-    assertThrows(ErrorResponseException.class, () -> creditService.createCreditService(creditMock));
+    assertThrows(RuntimeException.class, () -> creditService.createCreditService(creditMock).blockingAwait());
     verify(creditRepository, never()).save(creditMock);
   }
   @Test
@@ -119,7 +119,7 @@ public class CreditTest {
     when(creditRepository.findById("testCreditId")).thenReturn(Optional.of(creditMock));
 
     // Act
-    assertDoesNotThrow(() -> creditService.updateCreditService(creditMock));
+    assertDoesNotThrow(() -> creditService.updateCreditService(creditMock).blockingAwait());
 
     // Assert
     verify(creditRepository, times(1)).save(creditMock);
@@ -133,7 +133,7 @@ public class CreditTest {
     when(creditRepository.findById("testCreditId")).thenReturn(Optional.of(creditMock));
 
     // Act
-    assertDoesNotThrow(() -> creditService.deleteCreditById("testCreditId"));
+    assertDoesNotThrow(() -> creditService.deleteCreditById("testCreditId").blockingAwait());
 
     // Assert
     verify(creditRepository, times(1)).delete(creditMock);
@@ -144,7 +144,7 @@ public class CreditTest {
     when(creditRepository.findById("testCreditId")).thenReturn(Optional.empty());
 
     // Act and Assert
-    assertThrows(ErrorResponseException.class, () -> creditService.deleteCreditById("testCreditId"));
+    assertThrows(RuntimeException.class, () -> creditService.deleteCreditById("testCreditId").blockingAwait());
     verify(creditRepository, never()).delete(any());
   }
   @Test
@@ -161,7 +161,7 @@ public class CreditTest {
     when(creditRepository.findByCustomerId(testCustomerId)).thenReturn(creditsList);
 
     // Act
-    List<Credit> result = assertDoesNotThrow(() -> creditService.getCreditsByCustomerId(testCustomerId));
+    List<Credit> result = assertDoesNotThrow(() -> creditService.getCreditsByCustomerId(testCustomerId).blockingSingle());
 
     // Assert
     verify(customerApiExtImpl, times(1)).getCustomerById(testCustomerId);

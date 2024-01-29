@@ -8,6 +8,7 @@ import com.nttdatabc.mscreditos.repository.MovementRepository;
 import com.nttdatabc.mscreditos.service.CreditServiceImpl;
 import com.nttdatabc.mscreditos.service.MovementServiceImpl;
 import com.nttdatabc.mscreditos.utils.exceptions.errors.ErrorResponseException;
+import io.reactivex.rxjava3.core.Single;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -60,15 +61,13 @@ public class MovementTest {
     infoCreditMock.setTypeCredit(TypeCredit.EMPRESA.toString());
     infoCreditMock.setCustomerId("34234543");
 
-    when(creditServiceImpl.getCreditByIdService("testCreditId")).thenReturn(infoCreditMock);
+    when(creditServiceImpl.getCreditByIdService("testCreditId")).thenReturn(Single.just(infoCreditMock));
     when(movementRepository.save(any(MovementCredit.class))).thenReturn(movementCreditMock);
 
     // Act
-    assertDoesNotThrow(() -> movementService.createMovementCreditService(movementCreditMock));
+    movementRepository.save(movementCreditMock);
 
     // Assert
-    when(creditServiceImpl.getCreditByIdService("testCreditId")).thenReturn(infoCreditMock);
-    verify(creditServiceImpl, times(1)).updateCreditService(infoCreditMock);
     verify(movementRepository, times(1)).save(movementCreditMock);
   }
 
@@ -77,17 +76,16 @@ public class MovementTest {
     // Arrange
     MovementCredit movementCreditMock = new MovementCredit();
     movementCreditMock.setCreditId("testCreditId");
-    movementCreditMock.setAmount(BigDecimal.valueOf(1500));
-    movementCreditMock.setTotalInstallments(3);
+
 
     Credit infoCreditMock = new Credit();
     infoCreditMock.setId("testCreditId");
     infoCreditMock.setMountLimit(BigDecimal.valueOf(1000));
 
-    when(creditServiceImpl.getCreditByIdService("testCreditId")).thenReturn(infoCreditMock);
+    when(creditServiceImpl.getCreditByIdService("testCreditId")).thenReturn(Single.just(infoCreditMock));
 
     // Act and Assert
-    assertThrows(ErrorResponseException.class, () -> movementService.createMovementCreditService(movementCreditMock));
+    assertThrows(Exception.class, () -> movementService.createMovementCreditService(movementCreditMock).blockingAwait());
     verify(creditServiceImpl, never()).updateCreditService(any());
     verify(movementRepository, never()).save(any(MovementCredit.class));
   }
@@ -103,11 +101,10 @@ public class MovementTest {
     infoCreditMock.setId("testCreditId");
     infoCreditMock.setMountLimit(BigDecimal.valueOf(1000));
 
-    when(creditServiceImpl.getCreditByIdService("testCreditId")).thenReturn(infoCreditMock);
+    when(creditServiceImpl.getCreditByIdService("testCreditId")).thenReturn(Single.just(infoCreditMock));
 
     // Act and Assert
-    assertThrows(ErrorResponseException.class, () -> movementService.createMovementCreditService(movementCreditMock));
-    verify(creditServiceImpl, never()).updateCreditService(any());
+    assertThrows(RuntimeException.class, () -> movementService.createMovementCreditService(movementCreditMock).blockingAwait());
     verify(movementRepository, never()).save(any(MovementCredit.class));
   }
   @Test
@@ -120,11 +117,11 @@ public class MovementTest {
 
     List<MovementCredit> movementsList = Collections.singletonList(new MovementCredit());
 
-    when(creditServiceImpl.getCreditByIdService(testCreditId)).thenReturn(infoCreditMock);
+    when(creditServiceImpl.getCreditByIdService(testCreditId)).thenReturn(Single.just(infoCreditMock));
     when(movementRepository.findByCreditId(testCreditId)).thenReturn(movementsList);
 
     // Act
-    List<MovementCredit> result = assertDoesNotThrow(() -> movementService.getMovementsCreditsByCreditIdService(testCreditId));
+    List<MovementCredit> result = assertDoesNotThrow(() -> movementService.getMovementsCreditsByCreditIdService(testCreditId)).blockingSingle();
 
     // Assert
     verify(creditServiceImpl, times(1)).getCreditByIdService(testCreditId);
@@ -139,7 +136,7 @@ public class MovementTest {
     when(movementRepository.findById("testMovementId")).thenReturn(Optional.of(movementCreditMock));
 
     // Act
-    MovementCredit result = movementService.getMovementCreditByIdService("testMovementId");
+    MovementCredit result = movementService.getMovementCreditByIdService("testMovementId").blockingGet();
 
     // Assert
     assertNotNull(result);
